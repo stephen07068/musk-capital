@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
@@ -6,6 +6,7 @@ from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from .config import Config
+import os
 
 db = SQLAlchemy()
 jwt = JWTManager()
@@ -13,7 +14,9 @@ migrate = Migrate()
 limiter = Limiter(key_func=get_remote_address, default_limits=["20000 per day", "5000 per hour"])
 
 def create_app(config_class=Config):
-    app = Flask(__name__)
+    # React dist folder sits at repo root: ../dist relative to backend/
+    static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'dist'))
+    app = Flask(__name__, static_folder=static_folder, static_url_path='')
     app.config.from_object(config_class)
 
     # Init extensions
@@ -56,7 +59,7 @@ def create_app(config_class=Config):
     app.register_blueprint(search_bp,        url_prefix='/api/search')
     app.register_blueprint(market_bp,        url_prefix='/api/market')
 
-    # Global Error Handlers
+    # ── Global Error Handlers ─────────────────────────────────────────────────
     @app.errorhandler(400)
     def bad_request(e):
         return jsonify(error="Bad request", message=str(e.description)), 400
@@ -71,6 +74,9 @@ def create_app(config_class=Config):
 
     @app.errorhandler(404)
     def not_found(e):
+        # Serve React's index.html for all unknown routes (SPA routing)
+        if os.path.exists(static_folder):
+            return send_from_directory(static_folder, 'index.html')
         return jsonify(error="Not found", message=str(e.description)), 404
 
     @app.errorhandler(429)
@@ -81,9 +87,24 @@ def create_app(config_class=Config):
     def internal_server_error(e):
         return jsonify(error="Internal server error", message=str(e.description)), 500
 
+    # ── Health Check ──────────────────────────────────────────────────────────
     @app.route('/api/health')
     @limiter.exempt
     def health():
         return jsonify({'status': 'ok', 'message': 'Musk Capital API is running'}), 200
+
+    # ── Serve React Frontend (SPA catch-all) ──────────────────────────────────
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_frontend(path):
+        # Don't intercept /api/* routes
+        if path.startswith('api/'):
+            return jsonify(error="Not found"), 404
+        # Serve actual static files (JS, CSS, images) if they exist
+        full_path = os.path.join(static_folder, path)
+        if path and os.path.exists(full_path):
+            return send_from_directory(static_folder, path)
+        # For everything else (React routes), serve index.html
+        return send_from_directory(static_folder, 'index.html')
 
     return app
