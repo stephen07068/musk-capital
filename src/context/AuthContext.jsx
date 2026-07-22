@@ -14,7 +14,12 @@ export function AuthProvider({ children }) {
       if (token) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         try {
-          const res = await authAPI.me();
+          const res = await Promise.race([
+            authAPI.me(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('timeout')), 8000)
+            ),
+          ]);
           setUser(res.data);
         } catch (error) {
           console.error("Token validation failed:", error);
