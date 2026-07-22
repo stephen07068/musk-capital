@@ -10,26 +10,31 @@ export function AuthProvider({ children }) {
 
   // Initialize and validate token
   useEffect(() => {
+    let isMounted = true;
     const initAuth = async () => {
-      if (token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         try {
-          const res = await Promise.race([
-            authAPI.me(),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('timeout')), 8000)
-            ),
-          ]);
-          setUser(res.data);
+          const res = await authAPI.me();
+          if (isMounted) setUser(res.data);
         } catch (error) {
           console.error("Token validation failed:", error);
-          logout();
+          if (isMounted) {
+            setUser(null);
+            setToken(null);
+            localStorage.removeItem('token');
+            delete api.defaults.headers.common['Authorization'];
+          }
         }
+      } else {
+        if (isMounted) setUser(null);
       }
-      setLoading(false);
+      if (isMounted) setLoading(false);
     };
     initAuth();
-  }, [token]);
+    return () => { isMounted = false; };
+  }, []);
 
   const login = async (credentials, requireAdmin = false) => {
     try {
