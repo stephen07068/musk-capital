@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API_BASE = '/api';
+// In production (Pxxl), VITE_API_URL points to the backend (e.g. https://musk-capital-api.pxxl.run)
+// In development, use the local Vite proxy at /api
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 const api = axios.create({ baseURL: API_BASE });
 
